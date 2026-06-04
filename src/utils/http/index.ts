@@ -1,25 +1,28 @@
 import axios, {
   type AxiosError,
+  type AxiosHeaders,
   type AxiosInstance,
   type AxiosResponse,
   type InternalAxiosRequestConfig
 } from 'axios'
 
-import { addPending, removePending } from './pending'
-import { checkStatus } from './status'
+import { addPending, removePending } from './pending.js'
+import { checkStatus } from './status.js'
 import type {
   CustomRequestConfig,
   HttpHooks,
   RequestOptions,
   Result
-} from './types'
+} from './types.js'
 
 const DEFAULT_OPTIONS: Required<RequestOptions> = {
   withToken: true,
   repeatCancel: true,
   showError: true,
   returnNativeResponse: false,
-  transformResponse: true
+  transformResponse: true,
+  tokenHeader: 'Authorization',
+  tokenPrefix: 'Bearer'
 }
 
 export class HttpRequest {
@@ -37,6 +40,24 @@ export class HttpRequest {
     this.defaultOptions = options
 
     this.setupInterceptors()
+  }
+
+  getAxiosInstance(): AxiosInstance {
+    return this.instance
+  }
+
+  setHooks(hooks: HttpHooks) {
+    this.hooks = {
+      ...this.hooks,
+      ...hooks
+    }
+  }
+
+  setDefaultOptions(options: RequestOptions) {
+    this.defaultOptions = {
+      ...this.defaultOptions,
+      ...options
+    }
   }
 
   private setupInterceptors() {
@@ -68,7 +89,10 @@ export class HttpRequest {
         const token = this.hooks.getToken?.()
 
         if (options.withToken && token) {
-          ;(config.headers as any).Authorization = `Bearer ${token}`
+          ;(config.headers as AxiosHeaders).set(
+            options.tokenHeader,
+            this.formatToken(token, options.tokenPrefix)
+          )
         }
 
         return config
@@ -181,17 +205,25 @@ export class HttpRequest {
     }
 
     if (!error.response) {
-      return navigator.onLine ? '网络异常，请稍后重试' : '网络已断开'
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        return '网络已断开'
+      }
+
+      return '网络异常，请稍后重试'
     }
 
     return checkStatus(error.response.status)
   }
 
-  request<T = any>(config: CustomRequestConfig): Promise<T> {
+  private formatToken(token: string, prefix: string) {
+    return prefix ? `${prefix} ${token}` : token
+  }
+
+  request<T = unknown>(config: CustomRequestConfig): Promise<T> {
     return this.instance.request<any, T>(config)
   }
 
-  get<T = any>(
+  get<T = unknown>(
     url: string,
     params?: Record<string, any>,
     config: CustomRequestConfig = {}
@@ -204,9 +236,9 @@ export class HttpRequest {
     })
   }
 
-  post<T = any>(
+  post<T = unknown>(
     url: string,
-    data?: Record<string, any>,
+    data?: unknown,
     config: CustomRequestConfig = {}
   ): Promise<T> {
     return this.request<T>({
@@ -217,9 +249,9 @@ export class HttpRequest {
     })
   }
 
-  put<T = any>(
+  put<T = unknown>(
     url: string,
-    data?: Record<string, any>,
+    data?: unknown,
     config: CustomRequestConfig = {}
   ): Promise<T> {
     return this.request<T>({
@@ -230,9 +262,9 @@ export class HttpRequest {
     })
   }
 
-  patch<T = any>(
+  patch<T = unknown>(
     url: string,
-    data?: Record<string, any>,
+    data?: unknown,
     config: CustomRequestConfig = {}
   ): Promise<T> {
     return this.request<T>({
@@ -243,7 +275,7 @@ export class HttpRequest {
     })
   }
 
-  delete<T = any>(
+  delete<T = unknown>(
     url: string,
     params?: Record<string, any>,
     config: CustomRequestConfig = {}
@@ -256,7 +288,7 @@ export class HttpRequest {
     })
   }
 
-  upload<T = any>(
+  upload<T = unknown>(
     url: string,
     data: FormData,
     config: CustomRequestConfig = {}
@@ -279,6 +311,10 @@ export class HttpRequest {
     filename = 'download',
     config: CustomRequestConfig = {}
   ) {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      throw new Error('download 只能在浏览器环境中使用')
+    }
+
     const blob = await this.request<Blob>({
       ...config,
       url,
@@ -298,8 +334,19 @@ export class HttpRequest {
 
     link.href = blobUrl
     link.download = filename
+    link.style.display = 'none'
+    document.body.appendChild(link)
     link.click()
+    link.remove()
 
     window.URL.revokeObjectURL(blobUrl)
   }
+}
+
+export function createHttpRequest(
+  config: CustomRequestConfig,
+  hooks: HttpHooks = {},
+  options: RequestOptions = {}
+) {
+  return new HttpRequest(config, hooks, options)
 }

@@ -44,6 +44,16 @@ export interface RequestOptions {
    * 是否对响应数据做业务处理
    */
   transformResponse?: boolean
+
+  /**
+   * token 请求头名称，默认 Authorization
+   */
+  tokenHeader?: string
+
+  /**
+   * token 前缀，默认 Bearer。传空字符串时直接写入 token
+   */
+  tokenPrefix?: string
 }
 
 /**

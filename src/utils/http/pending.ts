@@ -1,4 +1,4 @@
-import type { CustomRequestConfig } from './types'
+import type { CustomRequestConfig } from './types.js'
 
 const pendingMap = new Map<string, AbortController>()
 
